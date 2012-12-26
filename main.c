@@ -39,48 +39,54 @@
 #define BTN_PIN		PIND
 #define BTN_DDR		DDRD
 
-char led_phase = 0;
-unsigned char led_step = 0;
-unsigned char output_test=0;
+#define LED_MAX		16 //number of steps in each color
+#define LED_MAX_PWM	LED_MAX*LED_MAX
+
+char led_phase = 0; //The phase is what color shifting is going on 0:R-Y, 1:Y-G, 2:G-C etc
+unsigned char led_step = 0; //step in current phase
+unsigned char output_test=0; //step in PGIO output test
 
 int main(void)
 {
+	//--- Set clock speed ---//
 	//Set full speed (disables CKDIV8 by registers)
 	CLKPR = (1<<CLKPCE);
 	CLKPR = 0;
 
-	//Init LEDs
+	//--- Init LEDs ---//
 	LED_R_DDR |= LED_R;
 	LED_G_DDR |= LED_G;
 	LED_B_DDR |= LED_B;
 	
+	//Set up as 16-bit PWM
 	TCCR1A = (1<<COM1A1)|(1<<COM1A0)|(1<<COM1B1)|(1<<COM1B0)|(1<<COM1C1)|(1<<COM1C0)|(1<<WGM11);
 	TCCR1B = (1<<WGM12)|(1<<WGM13)|(1<<CS10);
-	
 	ICR1 = 0xFFFF;
 	
-	LED_R_PWM = 0xffff;
+	//Set initial values
+	LED_R_PWM = LED_MAX_PWM;
 	LED_G_PWM = 0x0;
 	LED_B_PWM = 0x0;
 
-	//Init timer
-	TCCR0B = (1<<CS00)|(0<<CS01)|(1<<CS02);
-	TIMSK0 = (1<<TOIE0);
+	//--- Init timer0 ---//
+	TCCR0B = (1<<CS00)|(0<<CS01)|(1<<CS02); //Select clock source
+	TIMSK0 = (1<<TOIE0); //Enable overflow interrupt
 
-	//Init button
+	//--- Init button ---//
 	//Has external pullup due to HWB
 	EICRB |= (1<<ISC71); //trigger interrupt on falling edge
-	EIMSK |= (1<<INT7);
+	EIMSK |= (1<<INT7); //Enable interrupt 7
 
+	//--- Set all GPIO as output ---//
 	DDRB = (1<<PB7) | (1<<PB6) | (1<<PB5) | (1<<PB4) | (1<<PB3) | (1<<PB2) | (1<<PB1) | (1<<PB0);
 	DDRC = (1<<PC7) | (1<<PC6) | (1<<PC5) | (1<<PC4) | (1<<PC2);
 	DDRD = (0<<PD7) | (1<<PD6) | (1<<PD5) | (1<<PD4) | (1<<PD3) | (1<<PD2) | (1<<PD1) | (1<<PD0);
 
 	sei();
 	while(1){
+		//--- Output test, to see that all GPIO has contact with PCB ---///
 		output_test = output_test << 1;
 		if (output_test == 0) output_test = 1;
-
 		PORTB = output_test;
 		PORTC = 0b11110100 & output_test;
 		PORTD = BTN | output_test;
@@ -88,42 +94,45 @@ int main(void)
 	}
 }
 
+//--- HWB Button interrupt ---//
 ISR(INT7_vect)
 {
 
 }
 
+//--- Timer0 interrupt ---//
 ISR(TIMER0_OVF_vect)
 {
+	//--- LEDs are not linear, compensating by running them in 16bit PWM and giving them eponential value (up to 255*255).
 	int led_val = led_step * led_step;
 	
 	switch (led_phase)
 	{
-	case 0:
+	case 0: //Red is max, increase green
 		LED_G_PWM = led_val;
 		break;
-	case 1:
-		LED_R_PWM = 0xffff - led_val ;
+	case 1: //Red and green is max, decrease red
+		LED_R_PWM = LED_MAX_PWM - led_val ;
 		break;
-	case 2:
+	case 2: //Green is max, increase blue
 		LED_B_PWM = led_val;
 		break;
-	case 3:
-		LED_G_PWM = 0xffff - led_val;
+	case 3: //Green and blue is max, decrease green
+		LED_G_PWM = LED_MAX_PWM - led_val;
 		break;
-	case 4:
+	case 4: //Blue is max, increase red
 		LED_R_PWM = led_val;
 		break;
-	case 5:
-		LED_B_PWM = 0xffff - led_val;
+	case 5: //Red and blue is max, decrease blue
+		LED_B_PWM = LED_MAX_PWM - led_val;
 		break;
 	}
 	
-	led_step++;
-	if (led_step == 255)
+	led_step++; //Next step in current phase
+	if (led_step == LED_MAX) //End of current phase
 	{
 		led_step = 0;
-		led_phase++;
-		if (led_phase > 5) led_phase = 0;
+		led_phase++; //Next phase
+		if (led_phase > 5) led_phase = 0; Go from phase 0 to phase 5 and start over.
 	}
 }
