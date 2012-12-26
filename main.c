@@ -22,17 +22,17 @@
 #define LED_R		(1<<PC6)
 #define LED_R_PORT	PORTC
 #define LED_R_DDR	DDRC
-#define LED_R_PWM	OCR1AL
+#define LED_R_PWM	OCR1A
 
 #define LED_G		(1<<PC5)
 #define LED_G_PORT	PORTC
 #define LED_G_DDR	DDRC
-#define LED_G_PWM	OCR1BL
+#define LED_G_PWM	OCR1B
 
 #define LED_B		(1<<PB7)
 #define LED_B_PORT	PORTB
 #define LED_B_DDR	DDRB
-#define LED_B_PWM	OCR1CL
+#define LED_B_PWM	OCR1C
 
 #define BTN		(1<<PD7)
 #define BTN_PORT	PORTD
@@ -54,10 +54,14 @@ int main(void)
 	LED_G_DDR |= LED_G;
 	LED_B_DDR |= LED_B;
 	
-	TCCR1A = (1<<COM1A1)|(1<<COM1A0)|(1<<COM1B1)|(1<<COM1B0)|(1<<COM1C1)|(1<<COM1C0)|(1<<WGM10);
-	TCCR1B = (1<<WGM12)|(1<<CS11);
-
-	LED_R_PWM = 255;
+	TCCR1A = (1<<COM1A1)|(1<<COM1A0)|(1<<COM1B1)|(1<<COM1B0)|(1<<COM1C1)|(1<<COM1C0)|(1<<WGM11);
+	TCCR1B = (1<<WGM12)|(1<<WGM13)|(1<<CS10);
+	
+	ICR1 = 0xFFFF;
+	
+	LED_R_PWM = 0xffff;
+	LED_G_PWM = 0x0;
+	LED_B_PWM = 0x0;
 
 	//Init timer
 	TCCR0B = (1<<CS00)|(0<<CS01)|(1<<CS02);
@@ -91,26 +95,27 @@ ISR(INT7_vect)
 
 ISR(TIMER0_OVF_vect)
 {
-
+	int led_val = led_step * led_step;
+	
 	switch (led_phase)
 	{
 	case 0:
-		LED_G_PWM++;
+		LED_G_PWM = led_val;
 		break;
 	case 1:
-		LED_R_PWM--;
+		LED_R_PWM = 0xffff - led_val ;
 		break;
 	case 2:
-		LED_B_PWM++;
+		LED_B_PWM = led_val;
 		break;
 	case 3:
-		LED_G_PWM--;
+		LED_G_PWM = 0xffff - led_val;
 		break;
 	case 4:
-		LED_R_PWM++;
+		LED_R_PWM = led_val;
 		break;
 	case 5:
-		LED_B_PWM--;
+		LED_B_PWM = 0xffff - led_val;
 		break;
 	}
 	
