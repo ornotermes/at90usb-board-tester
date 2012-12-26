@@ -39,7 +39,7 @@
 #define BTN_PIN		PIND
 #define BTN_DDR		DDRD
 
-#define LED_MAX		16 //number of steps in each color
+#define LED_MAX		255 //number of steps in each color, affects brightness and speed
 #define LED_MAX_PWM	LED_MAX*LED_MAX
 
 char led_phase = 0; //The phase is what color shifting is going on 0:R-Y, 1:Y-G, 2:G-C etc
@@ -133,6 +133,6 @@ ISR(TIMER0_OVF_vect)
 	{
 		led_step = 0;
 		led_phase++; //Next phase
-		if (led_phase > 5) led_phase = 0; Go from phase 0 to phase 5 and start over.
+		if (led_phase > 5) led_phase = 0; //Go from phase 0 to phase 5 and start over.
 	}
 }
