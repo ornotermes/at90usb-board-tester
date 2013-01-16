@@ -18,6 +18,9 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <stdio.h>
+#include "lcdlibrary/lcd.c"
+#include "custchars.c"
 
 #define LED_R		(1<<PC6)
 #define LED_R_PORT	PORTC
@@ -40,11 +43,20 @@
 #define BTN_DDR		DDRD
 
 #define LED_MAX		255 //number of steps in each color, affects brightness and speed
-#define LED_MAX_PWM	LED_MAX*LED_MAX
+#define LED_MAX_PWM	(uint16_t)LED_MAX*(uint16_t)LED_MAX
+
+//--- Function declaration ---//
+void printText(uint8_t pos);
+
+//Create a charecter stream for stdout
+FILE lcd_str = FDEV_SETUP_STREAM(lcd_putc, NULL, _FDEV_SETUP_WRITE);
 
 char led_phase = 0; //The phase is what color shifting is going on 0:R-Y, 1:Y-G, 2:G-C etc
 unsigned char led_step = 0; //step in current phase
 unsigned char output_test=0; //step in PGIO output test
+
+static char text[] = "       Grattis p\x8 f\2delsedagen Kim! ";
+uint8_t text_pos = 0;
 
 int main(void)
 {
@@ -76,21 +88,52 @@ int main(void)
 	//Has external pullup due to HWB
 	EICRB |= (1<<ISC71); //trigger interrupt on falling edge
 	EIMSK |= (1<<INT7); //Enable interrupt 7
+	
+	//--- Init rotary encoder ---//
+	EICRA |= (1<<ISC01);
+	EIMSK |= (1<<INT0);
 
-	//--- Set all GPIO as output ---//
-	DDRB = (1<<PB7) | (1<<PB6) | (1<<PB5) | (1<<PB4) | (1<<PB3) | (1<<PB2) | (1<<PB1) | (1<<PB0);
-	DDRC = (1<<PC7) | (1<<PC6) | (1<<PC5) | (1<<PC4) | (1<<PC2);
-	DDRD = (0<<PD7) | (1<<PD6) | (1<<PD5) | (1<<PD4) | (1<<PD3) | (1<<PD2) | (1<<PD1) | (1<<PD0);
+	lcd_init(LCD_DISP_ON);
+	custchars(); //upload custom chars
+	lcd_clrscr();
+	
+	stdout = stdin = &lcd_str; //Connect stdout to stream
+	
+	sei(); //Set interrupt
+	
+	printText(text_pos);
+	
+	while(1)
+	{
+	}
+}
 
-	sei();
-	while(1){
-		//--- Output test, to see that all GPIO has contact with PCB ---///
-		output_test = output_test << 1;
-		if (output_test == 0) output_test = 1;
-		PORTB = output_test;
-		PORTC = 0b11110100 & output_test;
-		PORTD = BTN | output_test;
-		_delay_ms(500);
+void printText(uint8_t pos)
+{
+	lcd_gotoxy(0,0);
+	char buf[9] = "        ";
+	for(char n = 0; n < 9; n++)
+	{
+		if (pos+n < sizeof(text)) buf[n] = text[pos+n];
+		else buf[n] = ' ';
+	}
+	printf(buf);
+}
+
+//--- Rotary encoder interrupt ---//
+ISR(INT0_vect)
+{
+	if(PIND & 0b00000010)
+	{
+		//--- Right turn code ---/
+		text_pos--;
+		printText(text_pos);
+	}
+	else
+	{
+		//--- Left turn code ---//
+		text_pos++;
+		printText(text_pos);
 	}
 }
 
@@ -104,7 +147,7 @@ ISR(INT7_vect)
 ISR(TIMER0_OVF_vect)
 {
 	//--- LEDs are not linear, compensating by running them in 16bit PWM and giving them eponential value (up to 255*255).
-	int led_val = led_step * led_step;
+	uint16_t led_val = led_step * led_step;
 	
 	switch (led_phase)
 	{
