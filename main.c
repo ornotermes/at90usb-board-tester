@@ -97,7 +97,7 @@ int main(void)
 //--- HWB Button interrupt ---//
 ISR(INT7_vect)
 {
-
+TIMSK0 ^= (1<<TOIE0);
 }
 
 //--- Timer0 interrupt ---//
